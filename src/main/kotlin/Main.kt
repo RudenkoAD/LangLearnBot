@@ -1,4 +1,5 @@
 import dev.inmo.micro_utils.fsm.common.State
+import dev.inmo.tgbotapi.extensions.api.edit.reply_markup.editMessageReplyMarkup
 import dev.inmo.tgbotapi.extensions.api.send.reply
 import dev.inmo.tgbotapi.extensions.api.send.send
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
@@ -7,16 +8,15 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitDataCallb
 import dev.inmo.tgbotapi.extensions.behaviour_builder.telegramBotWithBehaviourAndFSMAndStartLongPolling
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.command
 import dev.inmo.tgbotapi.extensions.utils.extensions.parseCommandsWithParams
-import dev.inmo.tgbotapi.extensions.utils.extensions.sameThread
-import dev.inmo.tgbotapi.extensions.utils.types.buttons.InlineKeyboardMarkup
+import dev.inmo.tgbotapi.extensions.utils.types.buttons.dataButton
+import dev.inmo.tgbotapi.extensions.utils.types.buttons.inlineKeyboard
 import dev.inmo.tgbotapi.types.IdChatIdentifier
-import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
-import dev.inmo.tgbotapi.types.message.abstracts.CommonMessage
+import dev.inmo.tgbotapi.types.message.abstracts.ContentMessage
 import dev.inmo.tgbotapi.types.message.content.TextContent
 import dev.inmo.tgbotapi.utils.botCommand
+import dev.inmo.tgbotapi.utils.row
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 
 
@@ -32,24 +32,26 @@ fun detectLanguage(text: String): String {
 
 
 sealed interface BotState : State
-data class MainMenu(override val context: IdChatIdentifier, val sourceMessage: CommonMessage<TextContent>) : BotState
-data class ExpectTranslationRequest(override val context: IdChatIdentifier, val sourceMessage: CommonMessage<TextContent>) : BotState
-data class StopState(override val context: IdChatIdentifier, val sourceMessage: CommonMessage<TextContent>) : BotState
-
+data class PageOne(override val context: IdChatIdentifier, val menuMessage: ContentMessage<TextContent>?) : BotState
+data class ExpectTranslationRequest(override val context: IdChatIdentifier) : BotState
+data class StopState(override val context: IdChatIdentifier) : BotState
+data class PageTwo(override val context: IdChatIdentifier, val menuMessage: ContentMessage<TextContent>?) : BotState
 suspend fun main(args: Array<String>) {
     val translator = ReversoTranslatorAPI()
     val botToken = args.first()
-
     telegramBotWithBehaviourAndFSMAndStartLongPolling<BotState>(
         botToken,
         CoroutineScope(Dispatchers.IO),
         onStateHandlingErrorHandler = { state, e ->
             when (state) {
                 is ExpectTranslationRequest -> {
-                    println("Thrown error on ExpectContentOrStopState")
+                    println("Thrown error on ExpectTranslationRequest")
                 }
                 is StopState -> {
                     println("Thrown error on StopState")
+                }
+                is PageOne -> {
+                    println("Thrown error on MainMenu")
                 }
                 else -> { println("thrown error inside of a void")}
             }
@@ -59,22 +61,54 @@ suspend fun main(args: Array<String>) {
     )//sets up the bot, now the behaviour builder:
 
     {
-        strictlyOn<MainMenu>{
-            val keyboard2 = InlineKeyboardMarkup(CallbackDataInlineKeyboardButton(text = "Translate!", callbackData = "GoToTranslation"))
-            sendMessage(it.context, text="welcome to the main menu", replyMarkup =  keyboard2 )
-            //val callback = waitDataCallbackQuery().filter {callback -> callback.chatInstance == it.context.toString()}.first()
+
+        strictlyOn<PageOne>{
+            val keyboard = inlineKeyboard {
+                row {
+                    dataButton(text = "Translate!", data = "GoToTranslation")
+                }
+                row {
+                    dataButton(text = "go to 2nd page", data = "GoToPage2")
+                }
+            }
+            val msg = it.menuMessage?:sendMessage(it.context, text="welcome to the main menu")
+            editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = keyboard)
             val callback = waitDataCallbackQuery().first()
             val content = callback.data
-            println(content)
+
             when(content){
                 "GoToTranslation" -> {
-                    println("yes")
-                    ExpectTranslationRequest(it.context, it.sourceMessage)
+                    println("translation")
+                    ExpectTranslationRequest(it.context)
                 }
-                else -> {
-                    println("no")
-                    it
+                "GoToPage2" -> {
+                    PageTwo(it.context, msg)
                 }
+                else -> {it}
+            }
+        }
+
+        strictlyOn<PageTwo>{
+            val keyboard = inlineKeyboard {
+                row {
+                    dataButton(text = "Translate!", data = "GoToTranslation")
+                }
+                row {
+                    dataButton(text = "go to 1st page", data = "GoToPage1")
+                }
+            }
+            val msg = it.menuMessage?:sendMessage(it.context, text="welcome to the main menu")
+            editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = keyboard)
+            val callback = waitDataCallbackQuery().first()
+            val content = callback.data
+            when(content){
+                "GoToTranslation" -> {
+                    ExpectTranslationRequest(it.context)
+                }
+                "GoToPage1" -> {
+                    PageOne(it.context, msg)
+                }
+                else -> {it}
             }
         }
 
@@ -84,13 +118,11 @@ suspend fun main(args: Array<String>) {
             ) {
                 +"Send me some garbage you want translated, you piece of shit,  or send " + botCommand("stop") + " if you want to stop me, you fucker"
             }
-            val contentMessage = waitAnyContentMessage().filter { message ->
-                message.sameThread(it.sourceMessage)
-            }.first()
+            val contentMessage = waitAnyContentMessage().first()
             val content = contentMessage.content
 
             when {
-                content is TextContent && content.parseCommandsWithParams().keys.contains("stop") -> StopState(it.context, it.sourceMessage)
+                content is TextContent && content.parseCommandsWithParams().keys.contains("stop") -> StopState(it.context)
                 content is TextContent -> {
                     if (content.text.length > 100) {
                         reply(contentMessage, "Text is too long")
@@ -107,19 +139,18 @@ suspend fun main(args: Array<String>) {
                 }
                 else -> {
                     reply(contentMessage, "fuck you")
-                    StopState(it.context, it.sourceMessage)
+                    StopState(it.context)
                 }
             }
         }
 
         strictlyOn<StopState> {
             send(it.context) { + "Edmund McMillen, You litte F**ker You made a shit of piece with your trash Issac it’s f**King Bad this trash game I will become back my money I hope you will in your next time a cow on a trash farm you sucker" }
-
             null
         }
 
         command("start") {
-            startChain(MainMenu(it.chat.id, it))
+            startChain(PageOne(it.chat.id, null))
         }
 
     }.second.join()

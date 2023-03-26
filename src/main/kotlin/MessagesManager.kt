@@ -26,4 +26,8 @@ class MessagesManager(private val chat: Chat) {
     fun getTextToLongMessage(): String {
         return "Sorry, your text is too long. Please, try again."
     }
+
+    fun getSomeErrorMessage(): String {
+        return "Something went wrong. Please, try again. If you see this message again use ${botCommand("start").command} to restart the bot."
+    }
 }

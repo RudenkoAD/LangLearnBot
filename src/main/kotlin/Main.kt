@@ -18,15 +18,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import reverso.LanguageCode
 
 
-fun detectLanguage(text: String): String {
+fun detectLanguage(text: String): LanguageCode {
     // Detect text language. Returns language code (en, ru, fr etc.). Use symbol search
-    if (text.contains(Regex("[а-яА-Я]"))) {
-        return "ru"
+    return if (text.contains(Regex("[а-яА-Я]"))) {
+        LanguageCode("ru")
     }
     else {
-        return "en"
+        LanguageCode("en")
     }
 }
 
@@ -97,7 +98,7 @@ suspend fun main(args: Array<String>) {
                     }
                     try {
                         val language = detectLanguage(content.text)
-                        val targetLang = if (language == "en") "ru" else "en"
+                        val targetLang = if (language.code == "en") LanguageCode("ru") else LanguageCode("en")
                         val translated = translator.translate(content.text, language, targetLang)
                         reply(contentMessage, translated.dictionary_entry_list[0].term)
                     } catch (e: Exception) {

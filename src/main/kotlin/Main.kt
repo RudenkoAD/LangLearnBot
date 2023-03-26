@@ -11,9 +11,10 @@ import dev.inmo.tgbotapi.extensions.utils.extensions.sameThread
 import dev.inmo.tgbotapi.extensions.utils.types.buttons.InlineKeyboardMarkup
 import dev.inmo.tgbotapi.types.IdChatIdentifier
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
+import dev.inmo.tgbotapi.types.message.HTMLParseMode
 import dev.inmo.tgbotapi.types.message.abstracts.CommonMessage
 import dev.inmo.tgbotapi.types.message.content.TextContent
-import dev.inmo.tgbotapi.utils.botCommand
+import dev.inmo.tgbotapi.utils.RiskFeature
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filter
@@ -37,6 +38,7 @@ data class MainMenu(override val context: IdChatIdentifier, val sourceMessage: C
 data class ExpectTranslationRequest(override val context: IdChatIdentifier, val sourceMessage: CommonMessage<TextContent>) : BotState
 data class StopState(override val context: IdChatIdentifier, val sourceMessage: CommonMessage<TextContent>) : BotState
 
+@OptIn(RiskFeature::class)
 suspend fun main(args: Array<String>) {
     val translator = ReversoTranslatorAPI()
     val botToken = args.first()
@@ -58,12 +60,11 @@ suspend fun main(args: Array<String>) {
             state
         }
     )//sets up the bot, now the behaviour builder:
-
     {
         strictlyOn<MainMenu>{
+            val mm = MessagesManager(it.sourceMessage.chat)
             val keyboard2 = InlineKeyboardMarkup(CallbackDataInlineKeyboardButton(text = "Translate!", callbackData = "GoToTranslation"))
-            sendMessage(it.context, text="welcome to the main menu", replyMarkup =  keyboard2 )
-            //val callback = waitDataCallbackQuery().filter {callback -> callback.chatInstance == it.context.toString()}.first()
+            sendMessage(it.context, text=mm.getMainMenuMessage(), replyMarkup =  keyboard2 )
             val callback = waitDataCallbackQuery().first()
             val content = callback.data
             println(content)
@@ -80,10 +81,11 @@ suspend fun main(args: Array<String>) {
         }
 
         strictlyOn<ExpectTranslationRequest> {
+            val mm = MessagesManager(it.sourceMessage.chat)
             send(
                 it.context,
             ) {
-                +"Send me some garbage you want translated, you piece of shit,  or send " + botCommand("stop") + " if you want to stop me, you fucker"
+                +mm.getTranslationRequestMessage()
             }
             val contentMessage = waitAnyContentMessage().filter { message ->
                 message.sameThread(it.sourceMessage)
@@ -94,15 +96,16 @@ suspend fun main(args: Array<String>) {
                 content is TextContent && content.parseCommandsWithParams().keys.contains("stop") -> StopState(it.context, it.sourceMessage)
                 content is TextContent -> {
                     if (content.text.length > 100) {
-                        reply(contentMessage, "Text is too long")
+                        reply(contentMessage, mm.getTextToLongMessage())
                     }
                     try {
                         val language = detectLanguage(content.text)
                         val targetLang = if (language.code == "en") LanguageCode("ru") else LanguageCode("en")
                         val translated = translator.translate(content.text, language, targetLang)
-                        reply(contentMessage, translated.dictionary_entry_list[0].term)
+                        reply(contentMessage, mm.getTranslationResultMessage(from=language, to=targetLang, translation=translated), parseMode = HTMLParseMode)
                     } catch (e: Exception) {
-                        reply(contentMessage, "К сожалению перевода данного слова не найдено. Попробуйте еще раз")
+                        reply(contentMessage, mm.getTranslationErrorMessage())
+                        print(e)
                     }
                     it
                 }

@@ -1,4 +1,3 @@
-import dev.inmo.micro_utils.fsm.common.State
 import dev.inmo.tgbotapi.extensions.api.send.reply
 import dev.inmo.tgbotapi.extensions.api.send.send
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
@@ -9,10 +8,8 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.command
 import dev.inmo.tgbotapi.extensions.utils.extensions.parseCommandsWithParams
 import dev.inmo.tgbotapi.extensions.utils.extensions.sameThread
 import dev.inmo.tgbotapi.extensions.utils.types.buttons.InlineKeyboardMarkup
-import dev.inmo.tgbotapi.types.IdChatIdentifier
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
 import dev.inmo.tgbotapi.types.message.HTMLParseMode
-import dev.inmo.tgbotapi.types.message.abstracts.CommonMessage
 import dev.inmo.tgbotapi.types.message.content.TextContent
 import dev.inmo.tgbotapi.utils.RiskFeature
 import kotlinx.coroutines.CoroutineScope
@@ -32,11 +29,6 @@ fun detectLanguage(text: String): LanguageCode {
     }
 }
 
-
-sealed interface BotState : State
-data class MainMenu(override val context: IdChatIdentifier, val sourceMessage: CommonMessage<TextContent>) : BotState
-data class ExpectTranslationRequest(override val context: IdChatIdentifier, val sourceMessage: CommonMessage<TextContent>) : BotState
-data class StopState(override val context: IdChatIdentifier, val sourceMessage: CommonMessage<TextContent>) : BotState
 
 @OptIn(RiskFeature::class)
 suspend fun main(args: Array<String>) {
@@ -110,7 +102,7 @@ suspend fun main(args: Array<String>) {
                     it
                 }
                 else -> {
-                    reply(contentMessage, "fuck you")
+                    reply(contentMessage, mm.getSomeErrorMessage())
                     StopState(it.context, it.sourceMessage)
                 }
             }

@@ -1,4 +1,6 @@
 import database.User
+import database.Users
+import database.users
 import dev.inmo.tgbotapi.extensions.api.edit.reply_markup.editMessageReplyMarkup
 import dev.inmo.tgbotapi.extensions.api.send.reply
 import dev.inmo.tgbotapi.extensions.api.send.send
@@ -8,20 +10,18 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitDataCallb
 import dev.inmo.tgbotapi.extensions.behaviour_builder.telegramBotWithBehaviourAndFSMAndStartLongPolling
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.command
 import dev.inmo.tgbotapi.extensions.utils.extensions.parseCommandsWithParams
+import dev.inmo.tgbotapi.extensions.utils.usernameChatOrNull
 import dev.inmo.tgbotapi.types.message.HTMLParseMode
 import dev.inmo.tgbotapi.types.message.content.TextContent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import reverso.LanguageCode
-import database.Users
-import database.users
-import dev.inmo.tgbotapi.extensions.utils.usernameChatOrNull
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
 import org.ktorm.dsl.insert
 import org.ktorm.entity.find
 import org.ktorm.support.postgresql.PostgreSqlDialect
+import reverso.LanguageCode
 import reverso.ReversoTranslatorAPI
 import java.lang.System.getenv
 
@@ -125,9 +125,6 @@ suspend fun main(args: Array<String>) {
         }
 
         command("start") {message ->
-            val mm = MessagesManager(message.chat)
-            send(message.chat, mm.getMainMenuMessage())
-
             // insert user to database if not exists (with same chatId)
             val user: User? = database.users.find { it.chatId eq message.chat.id.chatId.toString() }
             if (user == null) {

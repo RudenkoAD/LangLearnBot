@@ -10,28 +10,30 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.command
 import dev.inmo.tgbotapi.extensions.utils.extensions.parseCommandsWithParams
 import dev.inmo.tgbotapi.types.IdChatIdentifier
 import dev.inmo.tgbotapi.types.message.abstracts.ContentMessage
+import dev.inmo.tgbotapi.extensions.utils.extensions.sameThread
+import dev.inmo.tgbotapi.extensions.utils.types.buttons.InlineKeyboardMarkup
+import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
+import dev.inmo.tgbotapi.types.message.HTMLParseMode
 import dev.inmo.tgbotapi.types.message.content.TextContent
-import dev.inmo.tgbotapi.utils.botCommand
+import dev.inmo.tgbotapi.utils.RiskFeature
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import reverso.LanguageCode
 
 
-fun detectLanguage(text: String): String {
+fun detectLanguage(text: String): LanguageCode {
     // Detect text language. Returns language code (en, ru, fr etc.). Use symbol search
-    if (text.contains(Regex("[а-яА-Я]"))) {
-        return "ru"
+    return if (text.contains(Regex("[а-яА-Я]"))) {
+        LanguageCode("ru")
     }
     else {
-        return "en"
+        LanguageCode("en")
     }
 }
 
 
-sealed interface BotState : State
-data class MainMenu(override val context: IdChatIdentifier, val menuMessage: ContentMessage<TextContent>?) : BotState
-data class ExpectTranslationRequest(override val context: IdChatIdentifier) : BotState
-data class StopState(override val context: IdChatIdentifier) : BotState
+@OptIn(RiskFeature::class)
 suspend fun main(args: Array<String>) {
     val translator = ReversoTranslatorAPI()
     val botToken = args.first()
@@ -53,7 +55,6 @@ suspend fun main(args: Array<String>) {
             state
         }
     )//sets up the bot, now the behaviour builder:
-
     {
 
         strictlyOn<MainMenu>{
@@ -79,10 +80,11 @@ suspend fun main(args: Array<String>) {
         }
 
         strictlyOn<ExpectTranslationRequest> {
+            val mm = MessagesManager(it.sourceMessage.chat)
             send(
                 it.context,
             ) {
-                +"Send me some garbage you want translated, you piece of shit,  or send " + botCommand("stop") + " if you want to stop me, you fucker"
+                +mm.getTranslationRequestMessage()
             }
             val contentMessage = waitAnyContentMessage().first()
             val content = contentMessage.content
@@ -91,21 +93,22 @@ suspend fun main(args: Array<String>) {
                 content is TextContent && content.parseCommandsWithParams().keys.contains("stop") -> StopState(it.context)
                 content is TextContent -> {
                     if (content.text.length > 100) {
-                        reply(contentMessage, "Text is too long")
+                        reply(contentMessage, mm.getTextToLongMessage())
                     }
                     try {
                         val language = detectLanguage(content.text)
-                        val targetLang = if (language == "en") "ru" else "en"
+                        val targetLang = if (language.code == "en") LanguageCode("ru") else LanguageCode("en")
                         val translated = translator.translate(content.text, language, targetLang)
-                        reply(contentMessage, translated.dictionary_entry_list[0].term)
+                        reply(contentMessage, mm.getTranslationResultMessage(from=language, to=targetLang, translation=translated), parseMode = HTMLParseMode)
                     } catch (e: Exception) {
-                        reply(contentMessage, "К сожалению перевода данного слова не найдено. Попробуйте еще раз")
+                        reply(contentMessage, mm.getTranslationErrorMessage())
+                        print(e)
                     }
                     it
                 }
                 else -> {
-                    reply(contentMessage, "fuck you")
-                    StopState(it.context)
+                    reply(contentMessage, mm.getSomeErrorMessage())
+                    StopState(it.context, it.sourceMessage)
                 }
             }
         }

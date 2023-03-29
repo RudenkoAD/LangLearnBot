@@ -12,7 +12,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.freQuensy23-coder:reverso-api:1c0c2e14d4")
+    implementation("com.github.freQuensy23-coder:reverso-api:7804560")
     testImplementation(kotlin("test"))
     implementation ("dev.inmo:tgbotapi:7.0.0")
     implementation("org.slf4j:slf4j-api:2.0.6")

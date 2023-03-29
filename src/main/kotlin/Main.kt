@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import reverso.LanguageCode
 import database.Users
+import dev.inmo.tgbotapi.extensions.utils.usernameChatOrNull
 import org.ktorm.database.Database
 import org.ktorm.support.postgresql.PostgreSqlDialect
 import org.ktorm.support.postgresql.insertOrUpdate
@@ -121,8 +122,10 @@ suspend fun main(args: Array<String>) {
 
             // insert user to database if not exists (with same chat_id)
             database.insertOrUpdate(Users) {
-                set(it.chat_id, message.chat.id.chatId.toString()) // If someone changes username it can not work!
+                set(it.chat_id, message.chat.id.chatId.toString())
+                set(it.name, message.chat.usernameChatOrNull()?.username?.usernameWithoutAt)// If someone changes username it can not work!
             }
+
 
         }
 

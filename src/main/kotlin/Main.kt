@@ -1,3 +1,4 @@
+import database.User
 import dev.inmo.tgbotapi.extensions.api.edit.reply_markup.editMessageReplyMarkup
 import dev.inmo.tgbotapi.extensions.api.send.reply
 import dev.inmo.tgbotapi.extensions.api.send.send
@@ -63,7 +64,7 @@ suspend fun main(args: Array<String>) {
     )//sets up the bot, now the behaviour builder:
     {
         strictlyOn<MainMenu>{
-            val mm = MessagesManager(it.sourceMessage.chat)
+            val mm = MessagesManager(it.context)
             val msg = it.menuMessage?:sendMessage(it.context, mm.getMainMenuMessage(), replyMarkup = menumanager.getPageOne())
 
             val callback = waitDataCallbackQuery().first()
@@ -86,7 +87,7 @@ suspend fun main(args: Array<String>) {
         }
 
         strictlyOn<ExpectTranslationRequest> {
-            val mm = MessagesManager(it.sourceMessage.chat)
+            val mm = MessagesManager(it.context)
             send(
                 it.context,
             ) {

@@ -11,13 +11,16 @@ import dev.inmo.tgbotapi.extensions.utils.types.buttons.InlineKeyboardMarkup
 import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
 import dev.inmo.tgbotapi.types.message.HTMLParseMode
 import dev.inmo.tgbotapi.types.message.content.TextContent
-import dev.inmo.tgbotapi.utils.RiskFeature
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import reverso.LanguageCode
-
+import database.Users
+import org.ktorm.database.Database
+import org.ktorm.support.postgresql.PostgreSqlDialect
+import org.ktorm.support.postgresql.insertOrUpdate
+import java.lang.System.getenv
 
 fun detectLanguage(text: String): LanguageCode {
     // Detect text language. Returns language code (en, ru, fr etc.). Use symbol search
@@ -30,11 +33,12 @@ fun detectLanguage(text: String): LanguageCode {
 }
 
 
-@OptIn(RiskFeature::class)
+
 suspend fun main(args: Array<String>) {
     val translator = ReversoTranslatorAPI()
-    val botToken = args.first()
-
+    // bot token = getenv("BOT_TOKEN") or args.first() if None
+    val botToken = getenv("BOT_TOKEN") ?: args.first()
+    val database = Database.connect("jdbc:postgresql://${getenv("DATABASE_IP")}:${getenv("DATABASE_PORT")}/${getenv("DATABASE_NAME")}",  user = getenv("DATABASE_USER"), password = getenv("DATABASE_PASSWORD"),  dialect = PostgreSqlDialect())
     telegramBotWithBehaviourAndFSMAndStartLongPolling<BotState>(
         botToken,
         CoroutineScope(Dispatchers.IO),
@@ -62,7 +66,6 @@ suspend fun main(args: Array<String>) {
             println(content)
             when(content){
                 "GoToTranslation" -> {
-                    println("yes")
                     ExpectTranslationRequest(it.context, it.sourceMessage)
                 }
                 else -> {
@@ -109,13 +112,18 @@ suspend fun main(args: Array<String>) {
         }
 
         strictlyOn<StopState> {
-            send(it.context) { + "Edmund McMillen, You litte F**ker You made a shit of piece with your trash Issac it’s f**King Bad this trash game I will become back my money I hope you will in your next time a cow on a trash farm you sucker" }
-
-            null
+            MainMenu(it.context, it.sourceMessage)
         }
 
-        command("start") {
-            startChain(MainMenu(it.chat.id, it))
+        command("start") {message ->
+            val mm = MessagesManager(message.chat)
+            send(message.chat, mm.getMainMenuMessage())
+
+            // insert user to database if not exists (with same chat_id)
+            database.insertOrUpdate(Users) {
+                set(it.chat_id, message.chat.id.chatId.toString()) // If someone changes username it can not work!
+            }
+
         }
 
     }.second.join()

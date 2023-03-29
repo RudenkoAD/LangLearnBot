@@ -20,12 +20,9 @@ class MessagesManager(private val chat: Chat) {
             | ${translation.usages.take(3).map { it.prettifyUsage("<i>", "</i>") }.joinToString(separator = "\n* ", prefix = "* ") {it.s_text}}
         """.trimMargin()
     }
-    fun getTranslationErrorMessage(): String {
-        return "Sorry, I can't translate this text. Please, try again."
-    }
-    fun getTextToLongMessage(): String {
-        return "Sorry, your text is too long. Please, try again."
-    }
+    fun getTranslationErrorMessage(): String = "Sorry, I can't translate this text. Please, try again."
+
+    fun getTextToLongMessage(): String = "Sorry, your text is too long."
 
     fun getSomeErrorMessage(): String {
         return "Something went wrong. Please, try again. If you see this message again use ${botCommand("start").command} to restart the bot."

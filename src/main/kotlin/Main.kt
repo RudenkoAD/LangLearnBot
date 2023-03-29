@@ -1,3 +1,4 @@
+import dev.inmo.tgbotapi.extensions.api.edit.reply_markup.editMessageReplyMarkup
 import dev.inmo.tgbotapi.extensions.api.send.reply
 import dev.inmo.tgbotapi.extensions.api.send.send
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
@@ -6,14 +7,10 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitDataCallb
 import dev.inmo.tgbotapi.extensions.behaviour_builder.telegramBotWithBehaviourAndFSMAndStartLongPolling
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.command
 import dev.inmo.tgbotapi.extensions.utils.extensions.parseCommandsWithParams
-import dev.inmo.tgbotapi.extensions.utils.extensions.sameThread
-import dev.inmo.tgbotapi.extensions.utils.types.buttons.InlineKeyboardMarkup
-import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
 import dev.inmo.tgbotapi.types.message.HTMLParseMode
 import dev.inmo.tgbotapi.types.message.content.TextContent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import reverso.LanguageCode
 import database.Users
@@ -39,14 +36,15 @@ suspend fun main(args: Array<String>) {
     val translator = ReversoTranslatorAPI()
     // bot token = getenv("BOT_TOKEN") or args.first() if None
     val botToken = getenv("BOT_TOKEN") ?: args.first()
-    val database = Database.connect("jdbc:postgresql://${getenv("DATABASE_IP")}:${getenv("DATABASE_PORT")}/${getenv("DATABASE_NAME")}",  user = getenv("DATABASE_USER"), password = getenv("DATABASE_PASSWORD"),  dialect = PostgreSqlDialect())
+    //val database = Database.connect("jdbc:postgresql://${getenv("DATABASE_IP")}:${getenv("DATABASE_PORT")}/${getenv("DATABASE_NAME")}",  user = getenv("DATABASE_USER"), password = getenv("DATABASE_PASSWORD"),  dialect = PostgreSqlDialect())
+    val menumanager = KeyboardsManager()
     telegramBotWithBehaviourAndFSMAndStartLongPolling<BotState>(
         botToken,
         CoroutineScope(Dispatchers.IO),
         onStateHandlingErrorHandler = { state, e ->
             when (state) {
                 is ExpectTranslationRequest -> {
-                    println("Thrown error on ExpectContentOrStopState")
+                    println("Thrown error on ExpectTranslationRequest")
                 }
                 is StopState -> {
                     println("Thrown error on StopState")
@@ -58,38 +56,42 @@ suspend fun main(args: Array<String>) {
         }
     )//sets up the bot, now the behaviour builder:
     {
+
         strictlyOn<MainMenu>{
-            val mm = MessagesManager(it.sourceMessage.chat)
-            val keyboard2 = InlineKeyboardMarkup(CallbackDataInlineKeyboardButton(text = "Translate!", callbackData = "GoToTranslation"))
-            sendMessage(it.context, text=mm.getMainMenuMessage(), replyMarkup =  keyboard2 )
+            val mm = MessagesManager(it.context)
+            val msg = it.menuMessage?:sendMessage(it.context, mm.getMainMenuMessage(), replyMarkup = menumanager.getPageOne())
             val callback = waitDataCallbackQuery().first()
             val content = callback.data
-            println(content)
+
             when(content){
                 "GoToTranslation" -> {
-                    ExpectTranslationRequest(it.context, it.sourceMessage)
+                    println("translation")
+                    ExpectTranslationRequest(it.context)
                 }
-                else -> {
-                    println("no")
-                    it
+                "GoToPage2" -> {
+                    editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = menumanager.getPageTwo())
+                    MainMenu(it.context, msg)
                 }
+                "GoToPage1" -> {
+                    editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = menumanager.getPageOne())
+                    MainMenu(it.context, msg)
+                }
+                else -> {it}
             }
         }
 
         strictlyOn<ExpectTranslationRequest> {
-            val mm = MessagesManager(it.sourceMessage.chat)
+            val mm = MessagesManager(it.context)
             send(
                 it.context,
             ) {
                 +mm.getTranslationRequestMessage()
             }
-            val contentMessage = waitAnyContentMessage().filter { message ->
-                message.sameThread(it.sourceMessage)
-            }.first()
+            val contentMessage = waitAnyContentMessage().first()
             val content = contentMessage.content
 
             when {
-                content is TextContent && content.parseCommandsWithParams().keys.contains("stop") -> StopState(it.context, it.sourceMessage)
+                content is TextContent && content.parseCommandsWithParams().keys.contains("stop") -> StopState(it.context)
                 content is TextContent -> {
                     if (content.text.length > 100) {
                         reply(contentMessage, mm.getTextToLongMessage())
@@ -107,13 +109,13 @@ suspend fun main(args: Array<String>) {
                 }
                 else -> {
                     reply(contentMessage, mm.getSomeErrorMessage())
-                    StopState(it.context, it.sourceMessage)
+                    StopState(it.context)
                 }
             }
         }
 
         strictlyOn<StopState> {
-            MainMenu(it.context, it.sourceMessage)
+            MainMenu(it.context)
         }
 
         command("start") {message ->
@@ -125,9 +127,7 @@ suspend fun main(args: Array<String>) {
                 set(it.chat_id, message.chat.id.chatId.toString())
                 set(it.name, message.chat.usernameChatOrNull()?.username?.usernameWithoutAt)// If someone changes username it can not work!
             }
-
-
+                startChain(MainMenu(message.chat, null))
         }
-
     }.second.join()
 }

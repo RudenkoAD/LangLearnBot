@@ -16,10 +16,10 @@ fun main() {
         println(row[Users.name])
     }
     database.insert(Users) {it->
-        set(it.chat_id, "123_test_test")
+        set(it.chatId, "123_test_test")
         set(it.name, "test")
     }
     database.delete(Users) {it->
-        it.chat_id eq "123_test_test"
+        it.chatId eq "123_test_test"
     }
 }

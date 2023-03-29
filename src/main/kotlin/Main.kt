@@ -1,3 +1,4 @@
+import database.User
 import dev.inmo.tgbotapi.extensions.api.send.reply
 import dev.inmo.tgbotapi.extensions.api.send.send
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
@@ -17,10 +18,14 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import reverso.LanguageCode
 import database.Users
+import database.users
 import dev.inmo.tgbotapi.extensions.utils.usernameChatOrNull
 import org.ktorm.database.Database
+import org.ktorm.dsl.eq
+import org.ktorm.dsl.insert
+import org.ktorm.entity.find
 import org.ktorm.support.postgresql.PostgreSqlDialect
-import org.ktorm.support.postgresql.insertOrUpdate
+import reverso.ReversoTranslatorAPI
 import java.lang.System.getenv
 
 fun detectLanguage(text: String): LanguageCode {
@@ -40,6 +45,8 @@ suspend fun main(args: Array<String>) {
     // bot token = getenv("BOT_TOKEN") or args.first() if None
     val botToken = getenv("BOT_TOKEN") ?: args.first()
     val database = Database.connect("jdbc:postgresql://${getenv("DATABASE_IP")}:${getenv("DATABASE_PORT")}/${getenv("DATABASE_NAME")}",  user = getenv("DATABASE_USER"), password = getenv("DATABASE_PASSWORD"),  dialect = PostgreSqlDialect())
+
+
     telegramBotWithBehaviourAndFSMAndStartLongPolling<BotState>(
         botToken,
         CoroutineScope(Dispatchers.IO),
@@ -120,12 +127,13 @@ suspend fun main(args: Array<String>) {
             val mm = MessagesManager(message.chat)
             send(message.chat, mm.getMainMenuMessage())
 
-            // insert user to database if not exists (with same chat_id)
-            database.insertOrUpdate(Users) {
-                set(it.chat_id, message.chat.id.chatId.toString())
-                set(it.name, message.chat.usernameChatOrNull()?.username?.usernameWithoutAt)// If someone changes username it can not work!
+            // insert user to database if not exists (with same chatId)
+            val user: User? = database.users.find { it.chatId eq message.chat.id.chatId.toString() }
+            if (user == null) {
+                val username : String= message.chat.usernameChatOrNull()?.username?.usernameWithoutAt ?: "%username%"
+                database.insert(Users) {set(it.chatId, message.chat.id.chatId.toString())
+                                        set(it.name, username)}
             }
-
 
         }
 

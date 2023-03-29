@@ -8,13 +8,10 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitDataCallb
 import dev.inmo.tgbotapi.extensions.behaviour_builder.telegramBotWithBehaviourAndFSMAndStartLongPolling
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.command
 import dev.inmo.tgbotapi.extensions.utils.extensions.parseCommandsWithParams
-import dev.inmo.tgbotapi.extensions.utils.types.buttons.dataButton
-import dev.inmo.tgbotapi.extensions.utils.types.buttons.inlineKeyboard
 import dev.inmo.tgbotapi.types.IdChatIdentifier
 import dev.inmo.tgbotapi.types.message.abstracts.ContentMessage
 import dev.inmo.tgbotapi.types.message.content.TextContent
 import dev.inmo.tgbotapi.utils.botCommand
-import dev.inmo.tgbotapi.utils.row
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -32,13 +29,13 @@ fun detectLanguage(text: String): String {
 
 
 sealed interface BotState : State
-data class PageOne(override val context: IdChatIdentifier, val menuMessage: ContentMessage<TextContent>?) : BotState
+data class MainMenu(override val context: IdChatIdentifier, val menuMessage: ContentMessage<TextContent>?) : BotState
 data class ExpectTranslationRequest(override val context: IdChatIdentifier) : BotState
 data class StopState(override val context: IdChatIdentifier) : BotState
-data class PageTwo(override val context: IdChatIdentifier, val menuMessage: ContentMessage<TextContent>?) : BotState
 suspend fun main(args: Array<String>) {
     val translator = ReversoTranslatorAPI()
     val botToken = args.first()
+    val menumanager = MenuManager()
     telegramBotWithBehaviourAndFSMAndStartLongPolling<BotState>(
         botToken,
         CoroutineScope(Dispatchers.IO),
@@ -50,9 +47,6 @@ suspend fun main(args: Array<String>) {
                 is StopState -> {
                     println("Thrown error on StopState")
                 }
-                is PageOne -> {
-                    println("Thrown error on MainMenu")
-                }
                 else -> { println("thrown error inside of a void")}
             }
             e.printStackTrace()
@@ -62,17 +56,8 @@ suspend fun main(args: Array<String>) {
 
     {
 
-        strictlyOn<PageOne>{
-            val keyboard = inlineKeyboard {
-                row {
-                    dataButton(text = "Translate!", data = "GoToTranslation")
-                }
-                row {
-                    dataButton(text = "go to 2nd page", data = "GoToPage2")
-                }
-            }
-            val msg = it.menuMessage?:sendMessage(it.context, text="welcome to the main menu")
-            editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = keyboard)
+        strictlyOn<MainMenu>{
+            val msg = it.menuMessage?:sendMessage(it.context, text="welcome to the main menu", replyMarkup = menumanager.getPageOne())
             val callback = waitDataCallbackQuery().first()
             val content = callback.data
 
@@ -82,31 +67,12 @@ suspend fun main(args: Array<String>) {
                     ExpectTranslationRequest(it.context)
                 }
                 "GoToPage2" -> {
-                    PageTwo(it.context, msg)
-                }
-                else -> {it}
-            }
-        }
-
-        strictlyOn<PageTwo>{
-            val keyboard = inlineKeyboard {
-                row {
-                    dataButton(text = "Translate!", data = "GoToTranslation")
-                }
-                row {
-                    dataButton(text = "go to 1st page", data = "GoToPage1")
-                }
-            }
-            val msg = it.menuMessage?:sendMessage(it.context, text="welcome to the main menu")
-            editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = keyboard)
-            val callback = waitDataCallbackQuery().first()
-            val content = callback.data
-            when(content){
-                "GoToTranslation" -> {
-                    ExpectTranslationRequest(it.context)
+                    editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = menumanager.getPageTwo())
+                    MainMenu(it.context, msg)
                 }
                 "GoToPage1" -> {
-                    PageOne(it.context, msg)
+                    editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = menumanager.getPageOne())
+                    MainMenu(it.context, msg)
                 }
                 else -> {it}
             }
@@ -150,7 +116,7 @@ suspend fun main(args: Array<String>) {
         }
 
         command("start") {
-            startChain(PageOne(it.chat.id, null))
+            startChain(MainMenu(it.chat.id, null))
         }
 
     }.second.join()

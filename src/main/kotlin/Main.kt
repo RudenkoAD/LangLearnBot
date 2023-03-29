@@ -1,4 +1,3 @@
-import dev.inmo.micro_utils.fsm.common.State
 import dev.inmo.tgbotapi.extensions.api.edit.reply_markup.editMessageReplyMarkup
 import dev.inmo.tgbotapi.extensions.api.send.reply
 import dev.inmo.tgbotapi.extensions.api.send.send
@@ -8,21 +7,12 @@ import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitDataCallb
 import dev.inmo.tgbotapi.extensions.behaviour_builder.telegramBotWithBehaviourAndFSMAndStartLongPolling
 import dev.inmo.tgbotapi.extensions.behaviour_builder.triggers_handling.command
 import dev.inmo.tgbotapi.extensions.utils.extensions.parseCommandsWithParams
-import dev.inmo.tgbotapi.types.IdChatIdentifier
-import dev.inmo.tgbotapi.types.message.abstracts.ContentMessage
-import dev.inmo.tgbotapi.extensions.utils.extensions.sameThread
-import dev.inmo.tgbotapi.extensions.utils.types.buttons.InlineKeyboardMarkup
-import dev.inmo.tgbotapi.types.buttons.InlineKeyboardButtons.CallbackDataInlineKeyboardButton
 import dev.inmo.tgbotapi.types.message.HTMLParseMode
 import dev.inmo.tgbotapi.types.message.content.TextContent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import reverso.LanguageCode
-import database.Users
-import org.ktorm.database.Database
-import org.ktorm.support.postgresql.PostgreSqlDialect
-import org.ktorm.support.postgresql.insertOrUpdate
 import java.lang.System.getenv
 
 fun detectLanguage(text: String): LanguageCode {
@@ -41,8 +31,8 @@ suspend fun main(args: Array<String>) {
     val translator = ReversoTranslatorAPI()
     // bot token = getenv("BOT_TOKEN") or args.first() if None
     val botToken = getenv("BOT_TOKEN") ?: args.first()
-    val database = Database.connect("jdbc:postgresql://${getenv("DATABASE_IP")}:${getenv("DATABASE_PORT")}/${getenv("DATABASE_NAME")}",  user = getenv("DATABASE_USER"), password = getenv("DATABASE_PASSWORD"),  dialect = PostgreSqlDialect())
-    val menumanager = MenuManager()
+    //val database = Database.connect("jdbc:postgresql://${getenv("DATABASE_IP")}:${getenv("DATABASE_PORT")}/${getenv("DATABASE_NAME")}",  user = getenv("DATABASE_USER"), password = getenv("DATABASE_PASSWORD"),  dialect = PostgreSqlDialect())
+    val menumanager = KeyboardsManager()
     telegramBotWithBehaviourAndFSMAndStartLongPolling<BotState>(
         botToken,
         CoroutineScope(Dispatchers.IO),
@@ -63,13 +53,15 @@ suspend fun main(args: Array<String>) {
     {
 
         strictlyOn<MainMenu>{
-            val msg = it.menuMessage?:sendMessage(it.context, text="welcome to the main menu", replyMarkup = menumanager.getPageOne())
+            val mm = MessagesManager(it.context)
+            val msg = it.menuMessage?:sendMessage(it.context, mm.getMainMenuMessage(), replyMarkup = menumanager.getPageOne())
             val callback = waitDataCallbackQuery().first()
             val content = callback.data
 
             when(content){
                 "GoToTranslation" -> {
-                  ExpectTranslationRequest(it.context, it.sourceMessage)
+                    println("translation")
+                    ExpectTranslationRequest(it.context)
                 }
                 "GoToPage2" -> {
                     editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = menumanager.getPageTwo())
@@ -84,7 +76,7 @@ suspend fun main(args: Array<String>) {
         }
 
         strictlyOn<ExpectTranslationRequest> {
-            val mm = MessagesManager(it.sourceMessage.chat)
+            val mm = MessagesManager(it.context)
             send(
                 it.context,
             ) {
@@ -112,25 +104,21 @@ suspend fun main(args: Array<String>) {
                 }
                 else -> {
                     reply(contentMessage, mm.getSomeErrorMessage())
-                    StopState(it.context, it.sourceMessage)
+                    StopState(it.context)
                 }
             }
         }
 
         strictlyOn<StopState> {
-            MainMenu(it.context, it.sourceMessage)
+            MainMenu(it.context)
         }
 
         command("start") {message ->
-            val mm = MessagesManager(message.chat)
-            send(message.chat, mm.getMainMenuMessage())
-
-            // insert user to database if not exists (with same chat_id)
-            database.insertOrUpdate(Users) {
-                set(it.chat_id, message.chat.id.chatId.toString()) // If someone changes username it can not work!
-            }
-
+                // insert user to database if not exists (with same chat_id)
+            //database.insertOrUpdate(Users) {
+            //    set(it.chat_id, message.chat.id.chatId.toString()) // If someone changes username it can not work!
+            //}
+                startChain(MainMenu(message.chat, null))
         }
-
     }.second.join()
 }

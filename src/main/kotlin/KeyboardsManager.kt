@@ -2,7 +2,7 @@ import dev.inmo.tgbotapi.extensions.utils.types.buttons.dataButton
 import dev.inmo.tgbotapi.extensions.utils.types.buttons.inlineKeyboard
 import dev.inmo.tgbotapi.utils.row
 
-class MenuManager {
+class KeyboardsManager {
     fun getPageOne() =
         inlineKeyboard {
             row {

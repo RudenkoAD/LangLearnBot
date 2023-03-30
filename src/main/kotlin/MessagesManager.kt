@@ -17,7 +17,7 @@ class MessagesManager(private val chat: Chat) {
         return """(${from.languageEmoji} -> ${to.languageEmoji}):
             |${translation.dictionary_entry_list.take(4).joinToString(separator = "\n* ", prefix = "* ") { it.term }}.
             | <b>Usages</b>
-            | ${translation.usages.take(3).map { it.prettifyUsage("<i>", "</i>") }.joinToString(separator = "\n* ", prefix = "* ") {it.s_text}}
+            | ${translation.usages.take(3).map { it.prettifyUsage("<i>", "</i>") }.joinToString(separator = "\n* ", prefix = "* ") {it.t_text}}
         """.trimMargin()
     }
     fun getTranslationErrorMessage(): String = "Sorry, I can't translate this text. Please, try again."

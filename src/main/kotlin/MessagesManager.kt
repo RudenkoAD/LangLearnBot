@@ -13,6 +13,9 @@ class MessagesManager(private val chat: Chat) {
     fun getTranslationRequestMessage(): String {
         return "Please, send me a text to translate. Send ${botCommand("stop").asText} to cancel translation."
     }
+
+    fun getLanguageChoiceMessage(): String = "Please Choose a language to translate to"
+
     fun getTranslationResultMessage(translation: TranslationResponse, from: LanguageCode, to: LanguageCode): String {
         return """(${from.languageEmoji} -> ${to.languageEmoji}):
             |${translation.dictionary_entry_list.take(4).joinToString(separator = "\n* ", prefix = "* ") { it.term }}.
@@ -27,4 +30,7 @@ class MessagesManager(private val chat: Chat) {
     fun getSomeErrorMessage(): String {
         return "Something went wrong. Please, try again. If you see this message again use ${botCommand("start").command} to restart the bot."
     }
+
+    fun getDatabaseErrorMessage(): String = "Database is shit"
+
 }

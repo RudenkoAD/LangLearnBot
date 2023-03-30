@@ -65,34 +65,31 @@ suspend fun main(args: Array<String>) {
     {
         strictlyOn<MainMenu>{
             val mm = MessagesManager(it.context)
-            val msg = it.menuMessage?:sendMessage(it.context, mm.getMainMenuMessage(), replyMarkup = menumanager.getPageOne())
-
+            val km= KeyboardsManager()
+            val msg = it.menuMessage?:sendMessage(it.context, mm.getMainMenuMessage(), replyMarkup = km.getPageOneKeyboard())
+            it.menuMessage = msg
             val callback = waitDataCallbackQuery().first()
             val content = callback.data
 
-            when(content){
-                "GoToTranslation" -> {
+            when{
+                content=="GoToTranslation" -> {
                     println("translation")
                     ExpectTranslationRequest(it.context)
                 }
-                "GoToPage2" -> {
-                    editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = menumanager.getPageTwo())
-                    MainMenu(it.context, msg)
+                content=="GoToPage2" -> {
+                    editMessageReplyMarkup(msg, replyMarkup = km.getPageTwoKeyboard())
+                    it
                 }
-                "GoToPage1" -> {
-                    editMessageReplyMarkup(msg.chat.id, msg.messageId, replyMarkup = menumanager.getPageOne())
-                    MainMenu(it.context, msg)
+                content=="GoToPage1" -> {
+                    editMessageReplyMarkup(msg, replyMarkup = km.getPageOneKeyboard())
+                    it
                 }
                 else -> {it}}
         }
 
         strictlyOn<ExpectTranslationRequest> {
             val mm = MessagesManager(it.context)
-            send(
-                it.context,
-            ) {
-                +mm.getTranslationRequestMessage()
-            }
+            sendMessage(it.context, mm.getTranslationRequestMessage())
             val contentMessage = waitAnyContentMessage().first()
             val content = contentMessage.content
 

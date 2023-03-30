@@ -2,8 +2,8 @@ import database.User
 import database.Users
 import database.users
 import dev.inmo.tgbotapi.extensions.api.edit.reply_markup.editMessageReplyMarkup
+import dev.inmo.tgbotapi.extensions.api.edit.text.editMessageText
 import dev.inmo.tgbotapi.extensions.api.send.reply
-import dev.inmo.tgbotapi.extensions.api.send.send
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitAnyContentMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitDataCallbackQuery
@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.first
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
 import org.ktorm.dsl.insert
+import org.ktorm.dsl.update
 import org.ktorm.entity.find
 import org.ktorm.support.postgresql.PostgreSqlDialect
 import reverso.LanguageCode
@@ -41,7 +42,6 @@ suspend fun main(args: Array<String>) {
     val translator = ReversoTranslatorAPI()
     // bot token = getenv("BOT_TOKEN") or args.first() if None
     val botToken = getenv("BOT_TOKEN") ?: args.first()
-    val menumanager = KeyboardsManager()
     val database = Database.connect("jdbc:postgresql://${getenv("DATABASE_IP")}:${getenv("DATABASE_PORT")}/${getenv("DATABASE_NAME")}",  user = getenv("DATABASE_USER"), password = getenv("DATABASE_PASSWORD"),  dialect = PostgreSqlDialect())
 
 
@@ -74,7 +74,7 @@ suspend fun main(args: Array<String>) {
             when{
                 content=="GoToTranslation" -> {
                     println("translation")
-                    ExpectTranslationRequest(it.context)
+                    ExpectTranslationRequest(it.context, it.user)
                 }
                 content=="GoToPage2" -> {
                     editMessageReplyMarkup(msg, replyMarkup = km.getPageTwoKeyboard())
@@ -82,6 +82,26 @@ suspend fun main(args: Array<String>) {
                 }
                 content=="GoToPage1" -> {
                     editMessageReplyMarkup(msg, replyMarkup = km.getPageOneKeyboard())
+                    it
+                }
+                content=="GoToLanguageChoice" -> {
+                    editMessageText(msg, mm.getLanguageChoiceMessage())
+                    editMessageReplyMarkup(msg, replyMarkup = km.getLanguageChoiceKeyboard())
+                    it
+                }
+                content.startsWith("ChangelangTo_") -> {
+                    editMessageText(msg, mm.getMainMenuMessage())
+                    editMessageReplyMarkup(msg, replyMarkup = km.getPageOneKeyboard())
+                    try {
+                        database.update(Users) { user ->
+                            set(user.targetLanguage, content.substring(13, 15))
+                            where { user.chatId eq msg.chat.id.chatId.toString() }
+                        }
+                    } catch (e: Exception){
+                        reply(msg, mm.getDatabaseErrorMessage())
+                        print(e)
+                    }
+                    it.user.targetLanguage = content.substring(13, 15)
                     it
                 }
                 else -> {it}}
@@ -94,14 +114,14 @@ suspend fun main(args: Array<String>) {
             val content = contentMessage.content
 
             when {
-                content is TextContent && content.parseCommandsWithParams().keys.contains("stop") -> StopState(it.context)
+                content is TextContent && content.parseCommandsWithParams().keys.contains("stop") -> StopState(it.context, it.user)
                 content is TextContent -> {
                     if (content.text.length > 100) {
                         reply(contentMessage, mm.getTextToLongMessage())
                     }
                     try {
                         val language = detectLanguage(content.text)
-                        val targetLang = if (language.code == "en") LanguageCode("ru") else LanguageCode("en")
+                        val targetLang = it.user.targetLanguageCode //?:if (language.code == "en") LanguageCode("ru") else LanguageCode("en")
                         val translated = translator.translate(content.text, language, targetLang)
                         reply(contentMessage, mm.getTranslationResultMessage(from=language, to=targetLang, translation=translated), parseMode = HTMLParseMode)
                     } catch (e: Exception) {
@@ -112,24 +132,28 @@ suspend fun main(args: Array<String>) {
                 }
                 else -> {
                     reply(contentMessage, mm.getSomeErrorMessage())
-                    StopState(it.context)
+                    StopState(it.context, it.user)
                 }
             }
         }
 
         strictlyOn<StopState> {
-            MainMenu(it.context)
+            MainMenu(it.context, it.user)
         }
 
         command("start") {message ->
             // insert user to database if not exists (with same chatId)
-            val user: User? = database.users.find { it.chatId eq message.chat.id.chatId.toString() }
+            var user: User? = database.users.find { it.chatId eq message.chat.id.chatId.toString() }
             if (user == null) {
                 val username : String= message.chat.usernameChatOrNull()?.username?.usernameWithoutAt ?: "%username%"
-                database.insert(Users) {set(it.chatId, message.chat.id.chatId.toString())
-                                        set(it.name, username)}
+                database.insert(Users) {
+                    set(it.chatId, message.chat.id.chatId.toString())
+                    set(it.name, username)
+                    set(it.targetLanguage, "en")
+                }
+                user = database.users.find { it.chatId eq message.chat.id.chatId.toString() }!!
             }
-            startChain(MainMenu(message.chat, null))
+            startChain(MainMenu(message.chat, user, null))
 
 
         }

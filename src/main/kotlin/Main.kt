@@ -15,6 +15,7 @@ import dev.inmo.tgbotapi.types.message.HTMLParseMode
 import dev.inmo.tgbotapi.types.message.content.TextContent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import org.ktorm.database.Database
 import org.ktorm.dsl.eq
@@ -28,6 +29,7 @@ import java.lang.System.getenv
 
 fun detectLanguage(text: String): LanguageCode {
     // Detect text language. Returns language code (en, ru, fr etc.). Use symbol search
+    //language codes are [ru, en, de, ar, es, fr, he, it, ja, ko, nl, pl, pt, ro, sv, tr, zh, uk]
     return if (text.contains(Regex("[а-яА-Я]"))) {
         LanguageCode("ru")
     }
@@ -68,9 +70,8 @@ suspend fun main(args: Array<String>) {
             val km= KeyboardsManager()
             val msg = it.menuMessage?:sendMessage(it.context, mm.getMainMenuMessage(), replyMarkup = km.getPageOneKeyboard())
             it.menuMessage = msg
-            val callback = waitDataCallbackQuery().first()
+            val callback = waitDataCallbackQuery().filter {query -> query.from.id == it.context.id}.first()
             val content = callback.data
-
             when{
                 content=="GoToTranslation" -> {
                     println("translation")
@@ -110,7 +111,7 @@ suspend fun main(args: Array<String>) {
         strictlyOn<ExpectTranslationRequest> {
             val mm = MessagesManager(it.context)
             sendMessage(it.context, mm.getTranslationRequestMessage())
-            val contentMessage = waitAnyContentMessage().first()
+            val contentMessage = waitAnyContentMessage().filter {message -> message.chat.id == it.context.id}.first()
             val content = contentMessage.content
 
             when {
@@ -154,7 +155,6 @@ suspend fun main(args: Array<String>) {
                 user = database.users.find { it.chatId eq message.chat.id.chatId.toString() }!!
             }
             startChain(MainMenu(message.chat, user, null))
-
 
         }
 

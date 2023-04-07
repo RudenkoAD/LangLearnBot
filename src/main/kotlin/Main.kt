@@ -27,16 +27,15 @@ import reverso.LanguageCode
 import reverso.ReversoTranslatorAPI
 import java.lang.System.getenv
 
-fun detectLanguage(text: String): LanguageCode {
+fun detectLanguage(text: String): LanguageCode =
     // Detect text language. Returns language code (en, ru, fr etc.). Use symbol search
     //language codes are [ru, en, de, ar, es, fr, he, it, ja, ko, nl, pl, pt, ro, sv, tr, zh, uk]
-    return if (text.contains(Regex("[а-яА-Я]"))) {
+    if (text.contains(Regex("[а-яА-Я]"))) {
         LanguageCode("ru")
     }
     else {
         LanguageCode("en")
     }
-}
 
 
 

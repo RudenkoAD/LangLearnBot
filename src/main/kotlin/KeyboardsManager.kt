@@ -3,6 +3,8 @@ import dev.inmo.tgbotapi.extensions.utils.types.buttons.inlineKeyboard
 import dev.inmo.tgbotapi.utils.row
 
 class KeyboardsManager {
+    fun getEmptyKeyboard() = inlineKeyboard {}
+
     fun getPageOneKeyboard() =
         inlineKeyboard {
             row { dataButton(text = "Translate!", data = "GoToTranslation") }
@@ -22,5 +24,14 @@ class KeyboardsManager {
             row{dataButton(text = "German \uD83C\uDDE9\uD83C\uDDEA", data = "ChangelangTo_de")}
             row{dataButton(text = "French \uD83C\uDDEB\uD83C\uDDF7", data = "ChangelangTo_fr")}
             row{dataButton(text = "Chinese \uD83C\uDDE8\uD83C\uDDF3", data = "ChangelangTo_zh")}
+        }
+    fun getTranslationKeyboard() =
+        inlineKeyboard {
+            row{
+                dataButton(text = "More Examples", data = "MoreExamples")
+            }
+            row{
+                dataButton(text = "Add to favourite", data = "AddToFavourite")
+            }
         }
 }

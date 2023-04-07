@@ -64,9 +64,9 @@ suspend fun main(args: Array<String>) {
         }
     )//sets up the bot, now the behaviour builder:
     {
+        val km= KeyboardsManager()
         strictlyOn<MainMenu>{
             val mm = MessagesManager(it.context)
-            val km= KeyboardsManager()
             val msg = it.menuMessage?:sendMessage(it.context, mm.getMainMenuMessage(), replyMarkup = km.getPageOneKeyboard())
             it.menuMessage = msg
             val callback = waitDataCallbackQuery().filter {query -> query.from.id == it.context.id}.first()

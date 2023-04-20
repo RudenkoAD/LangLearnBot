@@ -1,4 +1,4 @@
-package database
+package models
 
 import org.ktorm.database.Database
 import org.ktorm.entity.Entity

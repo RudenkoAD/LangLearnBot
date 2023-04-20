@@ -1,4 +1,4 @@
-import database.Users
+import models.Users
 import org.ktorm.database.Database
 import org.ktorm.dsl.*
 import org.ktorm.support.postgresql.PostgreSqlDialect

@@ -1,6 +1,6 @@
-import database.User
-import database.Users
-import database.users
+import models.User
+import models.Users
+import models.users
 import dev.inmo.tgbotapi.extensions.api.deleteMessage
 import dev.inmo.tgbotapi.extensions.api.edit.reply_markup.editMessageReplyMarkup
 import dev.inmo.tgbotapi.extensions.api.edit.text.editMessageText
@@ -46,9 +46,8 @@ fun detectLanguage(text: String): LanguageCode =
 
 suspend fun main(args: Array<String>) {
     val translator = ReversoTranslatorAPI()
-    // bot token = getenv("BOT_TOKEN") or args.first() if None
-    val botToken = getenv("BOT_TOKEN") ?: args.first()
-    val database = Database.connect("jdbc:postgresql://${getenv("DATABASE_IP")}:${getenv("DATABASE_PORT")}/${getenv("DATABASE_NAME")}",  user = getenv("DATABASE_USER"), password = getenv("DATABASE_PASSWORD"),  dialect = PostgreSqlDialect())
+    val botToken = getenv("BOT_TOKEN")
+    val database = DatabaseManager.database
 
 
     telegramBotWithBehaviourAndFSMAndStartLongPolling<BotState>(

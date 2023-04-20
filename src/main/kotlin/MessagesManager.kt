@@ -17,7 +17,7 @@ class MessagesManager(private val chat: Chat) {
     fun getLanguageChoiceMessage(): String = "Please Choose a language to translate to"
 
     fun getTranslationResultMessage(translation: TranslationResponse, from: LanguageCode, to: LanguageCode): String {
-        return """(${from.languageEmoji} -> ${to.languageEmoji}):
+        return """(${from.languageEmoji} -> ${to.languageEmoji}):${translation.request.source_text}
             |${translation.dictionary_entry_list.take(4).joinToString(separator = "\n* ", prefix = "* ") { it.term }}.
             | <b>Usages</b>
             | ${translation.usages.take(3).map { it.prettifyUsage("<i>", "</i>") }.joinToString(separator = "\n* ", prefix = "* ") {it.t_text}}

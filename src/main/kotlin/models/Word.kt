@@ -25,7 +25,7 @@ object Words : Table<Word>("t_words") {
 }
 
 interface Word : Entity<Word> {
-val id: String
+    val id: String
     val word: String
     val wordTranslation: String
     val chatId: String

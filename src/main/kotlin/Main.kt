@@ -22,12 +22,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import org.ktorm.database.Database
 import org.ktorm.dsl.eq
 import org.ktorm.dsl.insert
 import org.ktorm.dsl.update
 import org.ktorm.entity.find
-import org.ktorm.support.postgresql.PostgreSqlDialect
 import reverso.LanguageCode
 import reverso.ReversoTranslatorAPI
 import java.lang.System.getenv
@@ -44,18 +42,19 @@ fun detectLanguage(text: String): LanguageCode =
 
 
 
-suspend fun main(args: Array<String>) {
+
+suspend fun main() {
     val translator = ReversoTranslatorAPI()
     val botToken = getenv("BOT_TOKEN")
     val database = DatabaseManager.database
 
 
-    telegramBotWithBehaviourAndFSMAndStartLongPolling<BotState>(
+    telegramBotWithBehaviourAndFSMAndStartLongPolling(
         botToken,
         CoroutineScope(Dispatchers.IO),
         onStateHandlingErrorHandler = { state, e ->
             when (state) {
-                is ExpectTranslationRequest -> {
+                is TranslationState -> {
                     println("Thrown error on ExpectTranslationRequest")
                 }
                 is StopState -> {
@@ -68,59 +67,26 @@ suspend fun main(args: Array<String>) {
         }
     )//sets up the bot, now the behaviour builder:
     {
-        val km= KeyboardsManager()
-        strictlyOn<MainMenu>{
-            val mm = MessagesManager(it.context)
-            val msg = it.menuMessage?:sendMessage(it.context, mm.getMainMenuMessage(), replyMarkup = km.getPageOneKeyboard())
-            it.menuMessage = msg
+        strictlyOn<MainMenuState>{
+            val msg = it.tracedMessage?:sendMessage(it.context, MessagesManager.getMainMenuMessage(it.context), replyMarkup = KeyboardsManager.getMainMenuKeyboard())
             val dataflow = waitDataCallbackQuery().filter {query -> query.from.id == it.context.id}
             val msgflow = waitAnyContentMessage().filter {message -> message.chat.id == it.context.id}
             val flow = aggregateFlows(this, dataflow, msgflow)
-            val callback = flow.first()
-            when (callback){
+            when (val callback = flow.first()){
                 is DataCallbackQuery -> {
-                    val content = callback.data
-                    when {
-                        content == "GoToTranslation" -> {
-                            println("translation")
+                    when (callback.data) {
+                        MovementCallback.Translation -> {
                             deleteMessage(msg)
-                            ExpectTranslationRequest(it.context, it.user)
+                            TranslationState(it.context, it.user)
                         }
-
-                        content == "GoToPage2" -> {
-                            editMessageReplyMarkup(msg, replyMarkup = km.getPageTwoKeyboard())
-                            it
+                        MovementCallback.Favourite -> {
+                            FavouriteState(it.context, it.user, msg)
                         }
-
-                        content == "GoToPage1" -> {
-                            editMessageReplyMarkup(msg, replyMarkup = km.getPageOneKeyboard())
-                            it
+                        MovementCallback.LanguageChoice -> {
+                            LanguageChoiceState(it.context, it.user, msg)
                         }
-
-                        content == "GoToLanguageChoice" -> {
-                            editMessageText(msg, mm.getLanguageChoiceMessage())
-                            editMessageReplyMarkup(msg, replyMarkup = km.getLanguageChoiceKeyboard())
-                            it
-                        }
-
-                        content.startsWith("ChangelangTo_") -> {
-                            editMessageText(msg, mm.getMainMenuMessage())
-                            editMessageReplyMarkup(msg, replyMarkup = km.getPageOneKeyboard())
-                            try {
-                                database.update(Users) { user ->
-                                    set(user.targetLanguage, content.substring(13, 15))
-                                    where { user.chatId eq msg.chat.id.chatId.toString() }
-                                }
-                            } catch (e: Exception) {
-                                reply(msg, mm.getDatabaseErrorMessage())
-                                print(e)
-                            }
-                            it.user.targetLanguage = content.substring(13, 15)
-                            it
-                        }
-
                         else -> {
-                            it
+                            MainMenuState(it.context, it.user, msg)
                         }
                     }
                 }
@@ -129,55 +95,78 @@ suspend fun main(args: Array<String>) {
                     it
                 }
                 else -> {
-                    println(callback)
+                    println("Got unexpectec callback in main menu: $callback")
                     it
                 }
             }
         }
 
-        strictlyOn<ExpectTranslationRequest> {
-            val mm = MessagesManager(it.context)
-            sendMessage(it.context, mm.getTranslationRequestMessage())
+        strictlyOn<TranslationState> {
+            val msg = it.tracedMessage?:sendMessage(it.context, MessagesManager.getTranslationRequestMessage())
             val dataflow = waitDataCallbackQuery().filter { query -> query.from.id == it.context.id }
             val msgflow = waitAnyContentMessage().filter { message -> message.chat.id == it.context.id }
             val flow = aggregateFlows(this, dataflow, msgflow)
-            val callback = flow.first()
-            when (callback) {
+            when (val callback = flow.first()) {
                 is CommonMessage<MessageContent>->{
                     val content = callback.content
                     when {
                         content is TextContent && content.parseCommandsWithParams().keys.contains("stop") -> StopState(it.context, it.user)
                         content is TextContent -> {
                             if (content.text.length > 100) {
-                                reply(callback, mm.getTextToLongMessage())
+                                reply(callback, MessagesManager.getTextTooLongMessage())
                             }
                             val language = detectLanguage(content.text)
-                            val targetLang = if (language != LanguageCode("ru")) LanguageCode("ru") else it.user.targetLanguageCode
+                            val targetLang = it.user.targetLanguageCode
+                            if (language == targetLang){
+                                print("detected same languages\n")
+                                StopState(it.context, it.user)
+                            }
                             try {
                                 val translated = translator.translate(content.text, language, targetLang)
-                                reply(callback, mm.getTranslationResultMessage(from=language, to=targetLang, translation=translated), replyMarkup = km.getTranslationKeyboard(), parseMode = HTMLParseMode)
-                            } catch (e: Exception) {
-                                reply(callback, mm.getTranslationErrorMessage())
-                                print("Error when translating from ${language.code} to ${targetLang.code}")
-                                print(e)
+                                val newmsg = reply(callback,
+                                    MessagesManager.getTranslationResultMessage(translation=translated),
+                                    replyMarkup = KeyboardsManager.getTranslationResultKeyboard(),
+                                    parseMode = HTMLParseMode
+                                )
+                                TranslationState(it.context, it.user, newmsg, translated)
                             }
-                            it
+                            catch (e: Exception) {
+                                reply(callback, MessagesManager.getTranslationErrorMessage())
+                                print("Error when translating from ${language.code} to ${targetLang.code}: ")
+                                print(e)
+                                StopState(it.context, it.user)
+                            }
                         }
                         else -> {
-                            reply(callback, mm.getSomeErrorMessage())
+                            reply(callback, MessagesManager.getSomeErrorMessage())
                             StopState(it.context, it.user)
                         }
                     }
                 }
                 is DataCallbackQuery->{
-                    when (callback.data){
-                        "MoreExamples"->{
+                    when (callback.data) {
+                        //All of these callbacks must be coming from a translation message, which means tracedTranslation is not None
+                        //TODO this way of handling it is bad lmao
+                        TranslationKeyboardCallback.MoreExamples -> {
+                            editMessageText(
+                                message = msg,
+                                text = MessagesManager.getTranslationResultMessage(it.tracedTranslation!!, 8),
+                                replyMarkup = KeyboardsManager.getTranslationResultKeyboard(),
+                                parseMode = HTMLParseMode
+                            )
                             it
                         }
-                        "AddToFavourite"->{
+                        "AddToFavourite" -> {
+                            FavoriteWordsManager.addWordToFavorite(
+                                it.context.id.chatId.toString(),
+                                it.tracedTranslation!!.dictionary_entry_list[0].term,//TODO this is dumb but idk how to choose a translation, probably another menu
+                                it.tracedTranslation!!.request.source_text,
+                                it.tracedTranslation!!.request.source_lang,
+                                it.tracedTranslation!!.request.target_lang
+                            )
                             it
                         }
-                        else->{
+                        else -> {
                             println("fuck")
                             it
                         }
@@ -187,8 +176,63 @@ suspend fun main(args: Array<String>) {
             }
         }
 
+        strictlyOn<LanguageChoiceState> {
+            val msg = it.tracedMessage
+            val dataflow = waitDataCallbackQuery().filter { query -> query.from.id == it.context.id }
+            val msgflow = waitAnyContentMessage().filter { message -> message.chat.id == it.context.id }
+            val flow = aggregateFlows(this, dataflow, msgflow)
+
+            editMessageText(msg, MessagesManager.getLanguageChoiceMessage())
+            editMessageReplyMarkup(msg, replyMarkup = KeyboardsManager.getLanguageChoiceKeyboard())
+
+            when (val callback = flow.first()){
+                is DataCallbackQuery -> {
+                    val content = callback.data
+                    when {
+                        content.startsWith("ChangelangTo_") -> {
+                            try {
+                                database.update(Users) { user ->
+                                    set(user.targetLanguage, content.substring(13, 15))
+                                    where { user.chatId eq msg.chat.id.chatId.toString() }
+                                }
+                                it.user.targetLanguage = content.substring(13, 15)
+                                editMessageText(msg, MessagesManager.getMainMenuMessage(it.context))
+                                editMessageReplyMarkup(msg, replyMarkup = KeyboardsManager.getMainMenuKeyboard())
+                                MainMenuState(it.context, it.user, it.tracedMessage)
+                            } catch (e: Exception) {
+                                reply(msg, MessagesManager.getDatabaseErrorMessage())
+                                print(e)
+                                it
+                            }
+                        }//TODO add reactions to other possible callbacks
+                        else -> {
+                            it
+                        }
+                    }
+                }
+                is CommonMessage<*> -> {it}//TODO add reactions to messages in language choice state
+                else -> {it}
+            }
+        }
+
         strictlyOn<StopState> {
-            MainMenu(it.context, it.user)
+            MainMenuState(it.context, it.user)
+        }
+
+        strictlyOn<FavouriteState>{
+            editMessageText(it.tracedMessage, text = MessagesManager.getFavouriteMessage(), replyMarkup = KeyboardsManager.getFavouriteKeyboard())
+            val dataflow = waitDataCallbackQuery().filter { query -> query.from.id == it.context.id }
+            val msgflow = waitAnyContentMessage().filter { message -> message.chat.id == it.context.id }
+            val flow = aggregateFlows(this, dataflow, msgflow)
+
+            MainMenuState(it.context, it.user, it.tracedMessage)
+
+            when (val callback = flow.first()){//TODO add realisation to favouritestate
+                is DataCallbackQuery -> {it}
+                is CommonMessage<*> -> {it}
+                else -> {it}
+            }
+
         }
 
         command("start") {message ->
@@ -203,7 +247,7 @@ suspend fun main(args: Array<String>) {
                 }
                 user = database.users.find { it.chatId eq message.chat.id.chatId.toString() }!!
             }
-            startChain(MainMenu(message.chat, user, null))
+            startChain(MainMenuState(message.chat, user, null))
 
         }
 

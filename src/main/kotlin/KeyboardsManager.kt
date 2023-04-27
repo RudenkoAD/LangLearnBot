@@ -2,19 +2,19 @@ import dev.inmo.tgbotapi.extensions.utils.types.buttons.dataButton
 import dev.inmo.tgbotapi.extensions.utils.types.buttons.inlineKeyboard
 import dev.inmo.tgbotapi.utils.row
 
-class KeyboardsManager {
+object KeyboardsManager {
     fun getEmptyKeyboard() = inlineKeyboard {}
 
-    fun getPageOneKeyboard() =
+    fun getMainMenuKeyboard() =
         inlineKeyboard {
-            row { dataButton(text = "Translate!", data = "GoToTranslation") }
-            row { dataButton(text = "Go to 2nd page", data = "GoToPage2") }
-            row{ dataButton(text = "Choose a language to translate to", data = "GoToLanguageChoice") }
+            row { dataButton(text = "Translate!", data = MovementCallback.Translation) }
+            row { dataButton(text = "Go to favourite words", data = MovementCallback.Favourite)}
+            row{ dataButton(text = "Choose a language to translate to", data = MovementCallback.LanguageChoice) }
         }
-    fun getPageTwoKeyboard() =
+    fun getFavouriteKeyboard() =
         inlineKeyboard {
-        row { dataButton(text = "Translate!", data = "GoToTranslation") }
-        row { dataButton(text = "Go to 1st page", data = "GoToPage1") }
+        row { dataButton(text = "Show favourite words!", data = FavouriteKeyboardCallback.ShowFavouriteWords) }
+        row { dataButton(text = "Back", data = MovementCallback.Menu) }
     }
     fun getLanguageChoiceKeyboard() =
         inlineKeyboard {
@@ -25,13 +25,30 @@ class KeyboardsManager {
             row{dataButton(text = "French \uD83C\uDDEB\uD83C\uDDF7", data = "ChangelangTo_fr")}
             row{dataButton(text = "Chinese \uD83C\uDDE8\uD83C\uDDF3", data = "ChangelangTo_zh")}
         }
-    fun getTranslationKeyboard() =
+    fun getTranslationResultKeyboard() =
         inlineKeyboard {
             row{
-                dataButton(text = "More Examples", data = "MoreExamples")
+                dataButton(text = "More Examples", data = TranslationKeyboardCallback.MoreExamples)
+                dataButton(text = "Add to favourite", data = TranslationKeyboardCallback.AddToFavourite)
             }
             row{
-                dataButton(text = "Add to favourite", data = "AddToFavourite")
+                dataButton(text="Back to Menu", data = MovementCallback.Menu)
             }
         }
+}
+
+object MovementCallback{
+    const val Menu = "GoToMainMenu"
+    const val Translation = "GoToTranslation"
+    const val Favourite = "GoToFavourite"
+    const val LanguageChoice = "GoToLanguageChoice"
+}
+
+object TranslationKeyboardCallback{
+    const val MoreExamples = "MoreExamples"
+    const val AddToFavourite = "AddToFavourite"
+}
+
+object FavouriteKeyboardCallback{
+    const val ShowFavouriteWords = "ShowFavouriteWords"
 }

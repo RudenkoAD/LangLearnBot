@@ -8,7 +8,6 @@ object FavoriteWordsManager {
     private val database = DatabaseManager.database
     fun addWordToFavorite(chatId: String, word: String, wordTranslation: String, sourceLanguage: String, targetLanguage: String) {
         database.insert(Words) { it->
-            set(it.id, chatId + word)
             set(it.word, word)
             set(it.wordTranslation, wordTranslation)
             set(it.chatId, chatId)
